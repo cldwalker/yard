@@ -1,7 +1,7 @@
 require File.dirname(__FILE__) + '/../spec_helper'
 
 class YARD::CLI::YRI
-  public :optparse, :find_object, :cache_object
+  public :optparse, :find_object, :cache_object, :menu
 end
 
 describe YARD::CLI::Yardoc do
@@ -49,6 +49,45 @@ describe YARD::CLI::Yardoc do
       spaths = @yri.instance_variable_get("@search_paths")
       spaths.should include('line1')
       spaths.should include('line2')
+    end
+  end
+
+  describe '#menu' do
+    def code_objects(*objects)
+      objects.map {|mod,name|
+        nsp = CodeObjects::ModuleObject.new(:root, mod)
+        CodeObjects::MethodObject.new(nsp, name)
+      }
+    end
+
+    def user_chooses(answer)
+      $stdin.should_receive(:gets).and_return(answer)
+    end
+
+    def menu(*objects)
+      @yri.menu code_objects(*objects)
+    end
+
+    before do
+      @yri.stub!(:puts)
+      @yri.stub!(:print)
+    end
+
+    it "should return correct code_object" do
+      user_chooses '2'
+      menu([:A, :foo], [:B, :bar]).path.should == 'B#bar'
+    end
+
+    it "should abort if non-numerical choice" do
+      user_chooses 'a'
+      @yri.should_receive(:abort)
+      menu
+    end
+
+    it "should abort if choice is an invalid number" do
+      user_chooses '0'
+      @yri.should_receive(:abort)
+      menu
     end
   end
 end
