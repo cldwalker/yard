@@ -104,14 +104,17 @@ module YARD
       end
       
       def find_objects(name)
+        name = name.sub('.', '\.') if name[/^[A-Z]\w*\.\w/]
+        query = /#{name}/
+        log.debug "Searching with regular expression #{query.inspect} in search paths"
         @search_paths.each do |path|
           next unless File.exist?(path)
-          log.debug "Searching for #{name} in #{path}..."
+          log.debug "Searching with regular expression #{query.inspect} in #{path}..."
           Registry.load(path)
           Registry.load_all
           objects = Registry.all
           objects -= Registry.all(:method) if name[/^[A-Z][^#\.]*$/]
-          objects = objects.select {|e| e.path[/#{name}/] }
+          objects = objects.select {|e| e.path[query] }
           return objects if objects.size > 0
         end
         []

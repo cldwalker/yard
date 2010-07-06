@@ -1,7 +1,7 @@
 require File.dirname(__FILE__) + '/../spec_helper'
 
 class YARD::CLI::YRI
-  public :optparse, :find_object, :cache_object, :menu
+  public :optparse, :find_object, :cache_object, :menu, :find_objects
 end
 
 describe YARD::CLI::Yardoc do
@@ -52,12 +52,17 @@ describe YARD::CLI::Yardoc do
     end
   end
 
+  def method_objects(*objects)
+    objects.map {|mod,name,scope|
+      nsp = CodeObjects::ModuleObject.new(:root, mod)
+      CodeObjects::MethodObject.new(nsp, name, scope || :instance)
+    }
+  end
+
   describe '#menu' do
-    def code_objects(*objects)
-      objects.map {|mod,name|
-        nsp = CodeObjects::ModuleObject.new(:root, mod)
-        CodeObjects::MethodObject.new(nsp, name)
-      }
+    before do
+      @yri.stub!(:puts)
+      @yri.stub!(:print)
     end
 
     def user_chooses(answer)
@@ -65,15 +70,10 @@ describe YARD::CLI::Yardoc do
     end
 
     def menu(*objects)
-      @yri.menu code_objects(*objects)
+      @yri.menu method_objects(*objects)
     end
 
-    before do
-      @yri.stub!(:puts)
-      @yri.stub!(:print)
-    end
-
-    it "should return correct code_object" do
+    it "should return correct choice" do
       user_chooses '2'
       menu([:A, :foo], [:B, :bar]).path.should == 'B#bar'
     end
@@ -88,6 +88,64 @@ describe YARD::CLI::Yardoc do
       user_chooses '0'
       @yri.should_receive(:abort)
       menu
+    end
+  end
+
+  describe '#find_objects' do
+    before do
+      Registry.stub!(:load)
+      Registry.stub!(:load_all)
+      File.should_receive(:exist?).and_return(true)
+      @yri.instance_variable_set("@search_paths", ['.yardoc'])
+    end
+
+    def registry_contains(*objects)
+      objects = method_objects(*objects) unless objects[0].is_a?(CodeObjects::Base)
+      Registry.should_receive(:all).and_return objects
+    end
+
+    def find_objects(query)
+      @yri.find_objects(query).map {|e| e.path }
+    end
+
+    def class_objects(*objects)
+      objects.map {|mod,name,scope|
+        nsp = mod == :root ? mod : CodeObjects::ModuleObject.new(:root, mod)
+        CodeObjects::ClassObject.new(nsp, name, scope || :instance)
+      }
+    end
+
+    it "should find methods with part of method name" do
+      registry_contains [:A, :fan], [:B, :far, :class], [:B, :bub]
+      find_objects('fa').should == %w{A#fan B.far}
+    end
+
+    it "should find methods with a regular expression" do
+      registry_contains [:A, :read], [:B, :far], [:C, :car]
+      find_objects('r$').should == %w{B#far C#car}
+    end
+
+    it "should find instance methods with Class#meth" do
+      registry_contains [:A, :fan], [:A, :far, :class], [:B, :bub]
+      find_objects('A#f').should == %w{A#fan}
+    end
+
+    it "should find class methods with Class.meth" do
+      registry_contains [:A, :fan], [:A, :far, :class], [:B, :bub]
+      find_objects('A.f').should == %w{A.far}
+    end
+
+    it "should find non-methods with capitalized query" do
+      classes = class_objects [:root, :Awesome], [:root, :Dude], [:So, :Awesome]
+      meths = method_objects([:Awesome, :fan], [:Dude, :bub])
+      registry_contains  *(meths + classes)
+      Registry.stub!(:all).with(:method).and_return meths
+      find_objects('Awe').should == %w{Awesome So::Awesome}
+    end
+
+    it "should return empty if no matches" do
+      registry_contains [:A, :fan]
+      find_objects('blah').should == []
     end
   end
 end
