@@ -48,6 +48,9 @@ module YARD
           exit(1)
         elsif object = find_object(@name)
           print_object(object)
+        elsif (objects = find_objects(@name)).size > 0
+          object = objects.size > 1 ? menu(objects) : objects[0]
+          print_object(object)
         else
           STDERR.puts "No documentation for `#{@name}'"
           exit(1)
@@ -100,6 +103,32 @@ module YARD
         nil
       end
       
+      def find_objects(name)
+        @search_paths.each do |path|
+          next unless File.exist?(path)
+          log.debug "Searching for #{name} in #{path}..."
+          Registry.load(path)
+          Registry.load_all
+          objects = Registry.all
+          objects -= Registry.all(:method) if name[/^[A-Z][^#\.]*$/]
+          objects = objects.select {|e| e.path[/#{name}/] }
+          return objects if objects.size > 0
+        end
+        []
+      end
+
+      def menu(objects)
+        objects.each_with_index {|obj,i|
+          puts "#{i+1}. #{obj.path}"
+        }
+        print "Choose one: "
+        answer = $stdin.gets.chomp
+        if !answer[/^\d+$/] || answer.to_i < 1 || answer.to_i > objects.size
+          abort("`#{answer}' is an invalid choice.")
+        end
+        objects[answer.to_i - 1]
+      end
+
       private
       
       def load_cache
