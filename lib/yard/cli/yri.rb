@@ -90,10 +90,8 @@ module YARD
         @search_paths.unshift(Registry.yardoc_file)
         
         log.debug "Searching for #{name} in search paths"
-        @search_paths.each do |path|
-          next unless File.exist?(path)
+        search_all_paths do |path|
           log.debug "Searching for #{name} in #{path}..."
-          Registry.load(path)
           obj = Registry.at(name)
           if obj
             cache_object(name, path)
@@ -107,10 +105,8 @@ module YARD
         name = name.sub('.', '\.') if name[/^[A-Z]\w*\.\w/]
         query = /#{name}/
         log.debug "Searching with regular expression #{query.inspect} in search paths"
-        @search_paths.each do |path|
-          next unless File.exist?(path)
+        search_all_paths do |path|
           log.debug "Searching with regular expression #{query.inspect} in #{path}..."
-          Registry.load(path)
           Registry.load_all
           objects = Registry.all
           objects -= Registry.all(:method) if name[/^[A-Z][^#\.]*$/]
@@ -133,7 +129,15 @@ module YARD
       end
 
       private
-      
+
+      def search_all_paths
+        @search_paths.each do |path|
+          next unless File.exist?(path)
+          Registry.load path
+          yield path
+        end
+      end
+
       def load_cache
         return unless File.file?(CACHE_FILE)
         File.readlines(CACHE_FILE).each do |line|
